@@ -32,10 +32,10 @@ export default function MeetingPage() {
             setMyStream(localStream);
             setNameModal(false);
             socket.connect();
-            setMyId(socket.id);
-
-            socket.emit("join-room", { roomId, userName });
-
+            socket.on("connect", () => {
+                setMyId(socket.id);
+                socket.emit("join-room", { roomId, userName });
+            });
             if (myVideo.current) myVideo.current.srcObject = localStream;
         } catch (err) {
             alert("Kamera va mikrofonni yoqib qo‘ying va ruxsat bering.");
