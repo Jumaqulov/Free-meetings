@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import NameModal from "../components/NameModal";
 import VideoGrid from "../components/VideoGrid";
 import Toolbar from "../components/Toolbar";
@@ -84,15 +87,31 @@ export default function MeetingPage() {
             }
         });
 
+        // **Yangi user xonaga qo‘shilganda toast bildirishnomasini ko‘rsatish**
+        socket.on("user-joined", (joinedUserName) => {
+            if (joinedUserName !== userName) { // O‘z userimiz uchun emas
+                toast.info(`${joinedUserName} xonaga qo‘shildi!`, {
+                    position: "top-right",
+                    autoClose: 4000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    progress: undefined,
+                });
+            }
+        });
+
         return () => {
             socket.off("all-users");
             socket.off("signal");
             socket.off("user-left");
+            socket.off("user-joined");
             socket.disconnect();
             Object.values(peersRef.current).forEach(pc => pc.close());
             peersRef.current = {};
         };
-    }, [myStream]);
+    }, [myStream, userName]);
 
     function createPeerConnection(id, remoteName, initiator) {
         const pc = new RTCPeerConnection(iceConfig);
@@ -158,6 +177,7 @@ export default function MeetingPage() {
                 toggleCam={handleToggleCam}
                 leave={handleLeave}
             />
+            <ToastContainer />
         </div>
     );
 }

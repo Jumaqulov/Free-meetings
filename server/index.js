@@ -38,6 +38,9 @@ io.on("connection", (socket) => {
         // Barcha foydalanuvchilarga yuborish
         io.to(roomId).emit("all-users", clients);
 
+        // **Yangi user haqida boshqa userlarga toast uchun signal yuborish**
+        socket.to(roomId).emit("user-joined", userName);
+
         // Signal almashish uchun event
         socket.on("signal", (data) => {
             if (data.to) {
