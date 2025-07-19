@@ -38,27 +38,33 @@ export default function MeetingPage() {
                 video: true,
                 audio: true
             });
+            console.log("[handleJoin] ✅ Stream olindi:", stream);
             setMyStream(stream);
             setNameModal(false);
 
             socket.connect();
             socket.on("connect", () => {
+                console.log("[Socket] ✅ Ulandi:", socket.id);
                 socket.emit("join-room", { roomId, userName });
             });
         } catch (err) {
+            console.error("[handleJoin] ❌ Stream olishda xatolik:", err);
             alert("Kamera va mikrofonni yoqib ruxsat bering.");
         }
     };
 
     useEffect(() => {
-        if (!myStream) return;
+        if (!myStream) {
+            console.log("[useEffect] ⏳ myStream hali mavjud emas");
+            return;
+        }
 
-        // 1) Joiner: existing foydalanuvchilarni qabul qiladi
+        console.log("[useEffect] ✅ myStream mavjud, socket listeners tayyorlanyapti");
+
         socket.on("init-users", (clients) => {
-            // boshida o'zimizni qo'shamiz
+            console.log("[Socket] 🟡 init-users:", clients);
             setPeers([
                 { id: socket.id, userName, stream: myStream, self: true },
-                // keyin existing peer'larni qo'shamiz (stream keyin ontrack orqali keladi)
                 ...clients.map(c => ({
                     id: c.id,
                     userName: c.userName,
@@ -66,14 +72,12 @@ export default function MeetingPage() {
                     self: false
                 }))
             ]);
-            // existing bilan bog'lanish – initiator = true
             clients.forEach(c => createPeerConnection(c.id, c.userName, true));
         });
 
-        // 2) Boshqalar: yangi joiner haqida xabar oladi
         socket.on("user-joined", ({ id, userName: newName }) => {
+            console.log("[Socket] ➕ user-joined:", newName, id);
             toast.info(`${newName} xonaga qo‘shildi!`);
-            // yangi user bilan bog'lanish – initiator = false
             setPeers(old => [
                 ...old,
                 { id, userName: newName, stream: null, self: false }
@@ -81,11 +85,11 @@ export default function MeetingPage() {
             createPeerConnection(id, newName, false);
         });
 
-        // 3) Signal (offer/answer/candidate) qabul qilish
         socket.on("signal", async ({ from, signal, userName: remoteName }) => {
+            console.log("[Socket] 📶 signal qabul qilindi:", { from, signal });
             let pc = peersRef.current[from];
             if (!pc) {
-                // offer qabul qilinishidan oldin ham kerak bo'lsa
+                console.log("[Peer] 🔧 createPeerConnection (first-time) uchun:", remoteName);
                 setPeers(old => [
                     ...old,
                     { id: from, userName: remoteName, stream: null, self: false }
@@ -107,8 +111,8 @@ export default function MeetingPage() {
             }
         });
 
-        // 4) User left
         socket.on("user-left", (id) => {
+            console.log("[Socket] ❌ user-left:", id);
             setPeers(old => old.filter(p => p.id !== id));
             if (peersRef.current[id]) {
                 peersRef.current[id].close();
@@ -117,6 +121,7 @@ export default function MeetingPage() {
         });
 
         return () => {
+            console.log("[useEffect] 🧹 Tozalanyapti (cleanup)");
             socket.off("init-users");
             socket.off("user-joined");
             socket.off("signal");
@@ -129,30 +134,34 @@ export default function MeetingPage() {
 
     // PeerConnection yaratish funksiyasi
     function createPeerConnection(id, remoteName, initiator) {
+        console.log("[Peer] 🔗 Yaratilmoqda:", { id, remoteName, initiator });
         const pc = new RTCPeerConnection(iceConfig);
-        // media track larni yuborish
-        myStream.getTracks().forEach(track => pc.addTrack(track, myStream));
 
-        // ICE candidate'larni serverga uzatish
+        myStream.getTracks().forEach(track => {
+            console.log("[Peer] 🎤 Track qo‘shilmoqda:", track.kind);
+            pc.addTrack(track, myStream);
+        });
+
         pc.onicecandidate = e => {
             if (e.candidate) {
+                console.log("[Peer] ❄️ ICE candidate:", e.candidate);
                 socket.emit("signal", { to: id, signal: e.candidate });
             }
         };
 
-        // remote media kelganda peers ga qo'shish
         pc.ontrack = e => {
+            console.log("[Peer] 🎥 ontrack - stream qabul qilindi:", e.streams[0]);
             setPeers(old => old.map(p => {
                 if (p.id === id) return { ...p, stream: e.streams[0] };
                 return p;
             }));
         };
 
-        // initiator uchun offer yaratish trigger
         if (initiator) {
             pc.onnegotiationneeded = async () => {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
+                console.log("[Peer] 📨 Offer yaratildi:", offer);
                 socket.emit("signal", { to: id, signal: pc.localDescription });
             };
         }
