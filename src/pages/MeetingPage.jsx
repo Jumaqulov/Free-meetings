@@ -7,9 +7,9 @@ import NameModal from "../components/NameModal";
 import VideoGrid from "../components/VideoGrid";
 import Toolbar from "../components/Toolbar";
 
-const SOCKET_URL = "http://localhost:5000";
+const SOCKET_SERVER = import.meta.env.VITE_SOCKET_URL;
 
-const socket = io("https://free-meetings-backend.onrender.com", {
+const socket = io(SOCKET_SERVER, {
     path: "/socket.io",
     transports: ["websocket"]
 });
