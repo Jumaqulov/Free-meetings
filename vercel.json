@@ -1,10 +1,6 @@
 {
     "rewrites": [
         {
-            "source": "/socket.io/:path*",
-            "destination": "https://free-meetings-backend.up.railway.app/socket.io/:path*"
-        },
-        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

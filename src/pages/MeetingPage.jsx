@@ -9,7 +9,7 @@ import Toolbar from "../components/Toolbar";
 
 const SOCKET_URL = "http://localhost:5000";
 
-const socket = io(window.location.origin, {
+const socket = io("https://free-meetings-backend.onrender.com", {
     path: "/socket.io",
     transports: ["websocket"]
 });
