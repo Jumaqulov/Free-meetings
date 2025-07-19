@@ -2,7 +2,7 @@
     "rewrites": [
         {
             "source": "/socket.io/:path*",
-            "destination": "https://my-socket-server.onrender.com/socket.io/:path*"
+            "destination": "https://free-meetings-backend.up.railway.app/socket.io/:path*"
         },
         {
             "source": "/(.*)",
