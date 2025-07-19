@@ -12,7 +12,9 @@ import Toolbar from "../components/Toolbar";
 const SOCKET_URL = "http://localhost:5000";
 const socket = io(SOCKET_URL, { autoConnect: false });
 
-const iceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const iceConfig = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
 
 export default function MeetingPage() {
     const { roomId } = useParams();
@@ -20,118 +22,131 @@ export default function MeetingPage() {
 
     const [userName, setUserName] = useState("");
     const [nameModal, setNameModal] = useState(true);
-    const [peers, setPeers] = useState([]);
-    const [myId, setMyId] = useState("");
-    const myVideo = useRef();
-    const peersRef = useRef({});
+    const [peers, setPeers] = useState([]);         // { id, userName, stream, self }
+    const peersRef = useRef({});                    // id → RTCPeerConnection
     const [myStream, setMyStream] = useState(null);
 
     const [micOn, setMicOn] = useState(true);
     const [camOn, setCamOn] = useState(true);
 
+    // Foydalanuvchi kamerani ochib xonaga qo'shiladi
     const handleJoin = async () => {
         try {
-            const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            setMyStream(localStream);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+            });
+            setMyStream(stream);
             setNameModal(false);
+
             socket.connect();
             socket.on("connect", () => {
-                setMyId(socket.id);
                 socket.emit("join-room", { roomId, userName });
             });
-            if (myVideo.current) myVideo.current.srcObject = localStream;
         } catch (err) {
-            alert("Kamera va mikrofonni yoqib qo‘ying va ruxsat bering.");
+            alert("Kamera va mikrofonni yoqib ruxsat bering.");
         }
     };
 
     useEffect(() => {
         if (!myStream) return;
 
-        socket.on("all-users", (clients) => {
-            const others = clients.filter((c) => c.id !== socket.id);
-            setPeers(oldPeers => [
-                {
-                    id: socket.id,
-                    userName: userName,
-                    stream: myStream,
-                    self: true,
-                },
-                ...oldPeers.filter(p => !p.self),
+        // 1) Joiner: existing foydalanuvchilarni qabul qiladi
+        socket.on("init-users", (clients) => {
+            // boshida o'zimizni qo'shamiz
+            setPeers([
+                { id: socket.id, userName, stream: myStream, self: true },
+                // keyin existing peer'larni qo'shamiz (stream keyin ontrack orqali keladi)
+                ...clients.map(c => ({
+                    id: c.id,
+                    userName: c.userName,
+                    stream: null,
+                    self: false
+                }))
             ]);
-            others.forEach(client => createPeerConnection(client.id, client.userName, true));
+            // existing bilan bog'lanish – initiator = true
+            clients.forEach(c => createPeerConnection(c.id, c.userName, true));
         });
 
+        // 2) Boshqalar: yangi joiner haqida xabar oladi
+        socket.on("user-joined", ({ id, userName: newName }) => {
+            toast.info(`${newName} xonaga qo‘shildi!`);
+            // yangi user bilan bog'lanish – initiator = false
+            setPeers(old => [
+                ...old,
+                { id, userName: newName, stream: null, self: false }
+            ]);
+            createPeerConnection(id, newName, false);
+        });
+
+        // 3) Signal (offer/answer/candidate) qabul qilish
         socket.on("signal", async ({ from, signal, userName: remoteName }) => {
-            let peerConnection = peersRef.current[from];
-            if (!peerConnection) {
-                peerConnection = createPeerConnection(from, remoteName, false);
+            let pc = peersRef.current[from];
+            if (!pc) {
+                // offer qabul qilinishidan oldin ham kerak bo'lsa
+                setPeers(old => [
+                    ...old,
+                    { id: from, userName: remoteName, stream: null, self: false }
+                ]);
+                pc = createPeerConnection(from, remoteName, false);
             }
+
             if (signal.type === "offer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                socket.emit("signal", { to: from, signal: peerConnection.localDescription });
+                await pc.setRemoteDescription(signal);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit("signal", { to: from, signal: pc.localDescription });
             } else if (signal.type === "answer") {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(signal));
+                if (pc.signalingState === "have-local-offer") {
+                    await pc.setRemoteDescription(signal);
+                }
             } else if (signal.candidate) {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(signal));
+                await pc.addIceCandidate(new RTCIceCandidate(signal));
             }
         });
 
+        // 4) User left
         socket.on("user-left", (id) => {
-            setPeers(oldPeers => oldPeers.filter(p => p.id !== id));
+            setPeers(old => old.filter(p => p.id !== id));
             if (peersRef.current[id]) {
                 peersRef.current[id].close();
                 delete peersRef.current[id];
             }
         });
 
-        // **Yangi user xonaga qo‘shilganda toast bildirishnomasini ko‘rsatish**
-        socket.on("user-joined", (joinedUserName) => {
-            if (joinedUserName !== userName) { // O‘z userimiz uchun emas
-                toast.info(`${joinedUserName} xonaga qo‘shildi!`, {
-                    position: "top-right",
-                    autoClose: 4000,
-                    hideProgressBar: false,
-                    closeOnClick: true,
-                    pauseOnHover: true,
-                    draggable: true,
-                    progress: undefined,
-                });
-            }
-        });
-
         return () => {
-            socket.off("all-users");
+            socket.off("init-users");
+            socket.off("user-joined");
             socket.off("signal");
             socket.off("user-left");
-            socket.off("user-joined");
             socket.disconnect();
             Object.values(peersRef.current).forEach(pc => pc.close());
             peersRef.current = {};
         };
     }, [myStream, userName]);
 
+    // PeerConnection yaratish funksiyasi
     function createPeerConnection(id, remoteName, initiator) {
         const pc = new RTCPeerConnection(iceConfig);
+        // media track larni yuborish
         myStream.getTracks().forEach(track => pc.addTrack(track, myStream));
 
+        // ICE candidate'larni serverga uzatish
         pc.onicecandidate = e => {
             if (e.candidate) {
-                socket.emit("signal", { to: id, signal: { candidate: e.candidate } });
+                socket.emit("signal", { to: id, signal: e.candidate });
             }
         };
 
+        // remote media kelganda peers ga qo'shish
         pc.ontrack = e => {
-            setPeers(oldPeers => {
-                if (oldPeers.find(p => p.id === id)) return oldPeers;
-                return [...oldPeers, { id, userName: remoteName, stream: e.streams[0], self: false }];
-            });
+            setPeers(old => old.map(p => {
+                if (p.id === id) return { ...p, stream: e.streams[0] };
+                return p;
+            }));
         };
 
-        peersRef.current[id] = pc;
-
+        // initiator uchun offer yaratish trigger
         if (initiator) {
             pc.onnegotiationneeded = async () => {
                 const offer = await pc.createOffer();
@@ -139,23 +154,20 @@ export default function MeetingPage() {
                 socket.emit("signal", { to: id, signal: pc.localDescription });
             };
         }
+
+        peersRef.current[id] = pc;
         return pc;
     }
 
+    // mikrofon toggle
     const handleToggleMic = () => {
-        if (!myStream) return;
-        myStream.getAudioTracks().forEach(track => {
-            track.enabled = !micOn;
-        });
-        setMicOn(m => !m);
+        myStream.getAudioTracks().forEach(t => (t.enabled = !micOn));
+        setMicOn(v => !v);
     };
-
+    // kamera toggle
     const handleToggleCam = () => {
-        if (!myStream) return;
-        myStream.getVideoTracks().forEach(track => {
-            track.enabled = !camOn;
-        });
-        setCamOn(c => !c);
+        myStream.getVideoTracks().forEach(t => (t.enabled = !camOn));
+        setCamOn(v => !v);
     };
 
     const handleLeave = () => {
@@ -164,19 +176,27 @@ export default function MeetingPage() {
     };
 
     if (nameModal) {
-        return <NameModal userName={userName} setUserName={setUserName} onJoin={handleJoin} />;
+        return (
+            <NameModal
+                userName={userName}
+                setUserName={setUserName}
+                onJoin={handleJoin}
+            />
+        );
     }
 
     return (
-        <div className="h-screen min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-green-50 via-cyan-50 to-emerald-100 flex flex-col items-center py-7">
+        <div className="h-screen bg-gradient-to-br from-green-50 via-cyan-50 to-emerald-100 flex flex-col items-center relative">
             <VideoGrid peers={peers} />
-            <Toolbar
-                micOn={micOn}
-                camOn={camOn}
-                toggleMic={handleToggleMic}
-                toggleCam={handleToggleCam}
-                leave={handleLeave}
-            />
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20">
+                <Toolbar
+                    micOn={micOn}
+                    camOn={camOn}
+                    toggleMic={handleToggleMic}
+                    toggleCam={handleToggleCam}
+                    leave={handleLeave}
+                />
+            </div>
             <ToastContainer />
         </div>
     );
