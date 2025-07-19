@@ -11,10 +11,11 @@ export default function VideoPlayer({ peer, self, isVideoEnabled, videoClass }) 
     const videoRef = useRef();
 
     useEffect(() => {
-        if (videoRef.current && peer.stream) {
-            videoRef.current.srcObject = peer.stream;
+        const video = videoRef.current;
+        if (video && peer.stream) {
+            video.srcObject = peer.stream;
         }
-    }, [peer.stream]);
+    }, [peer.stream, videoRef]);
 
     return (
         <div className="relative flex flex-col items-center bg-black rounded-2xl shadow-xl overflow-hidden border-2 border-cyan-200 transition-all duration-300 w-full h-full">
