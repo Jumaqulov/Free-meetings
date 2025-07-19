@@ -15,12 +15,19 @@ export default function VideoPlayer({ peer, self, isVideoEnabled, videoClass }) 
 
         const attachStream = () => {
             const video = videoRef.current;
+            console.log(`[VideoPlayer] trying to attach stream for peer:`, peer.userName);
+            if (!peer.stream) {
+                console.warn(`[VideoPlayer] stream is not yet available for`, peer.userName);
+            }
+            if (!video) {
+                console.warn(`[VideoPlayer] videoRef.current is null for`, peer.userName);
+            }
+
             if (video && peer.stream) {
-                // faqat stream o'zgargan va DOM tayyor bo‘lsa
                 video.srcObject = peer.stream;
+                console.log(`[VideoPlayer] ✅ stream attached to video for`, peer.userName);
             } else {
-                // DOM hali render bo‘lmagan bo‘lishi mumkin, keyingi siklga o'tkazamiz
-                rafId = requestAnimationFrame(attachStream);
+                rafId = requestAnimationFrame(attachStream); // kutishda davom etadi
             }
         };
 
@@ -41,6 +48,12 @@ export default function VideoPlayer({ peer, self, isVideoEnabled, videoClass }) 
                     playsInline
                     className={videoClass}
                     style={{ borderRadius: 16 }}
+                    onLoadedMetadata={() => {
+                        console.log(`[VideoPlayer] ▶️ Video metadata loaded for`, peer.userName);
+                    }}
+                    onError={(e) => {
+                        console.error(`[VideoPlayer] ❌ Error loading video for`, peer.userName, e);
+                    }}
                 />
             ) : (
                 <div className="flex items-center justify-center w-full h-full bg-cyan-100">
