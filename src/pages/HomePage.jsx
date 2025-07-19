@@ -3,7 +3,11 @@ import { FaInstagram, FaTelegram, FaLinkedin, FaGithub, FaCopy } from "react-ico
 import { Link } from "react-router-dom";
 
 function generateRoomId() {
-    return Math.random().toString(36).slice(2, 10);
+    let id = '';
+    for (let i = 0; i < 5; i++) {
+        id += Math.floor(Math.random() * 10);
+    }
+    return id;
 }
 
 export default function HomePage() {
