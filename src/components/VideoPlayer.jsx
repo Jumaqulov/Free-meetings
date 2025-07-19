@@ -11,15 +11,29 @@ export default function VideoPlayer({ peer, self, isVideoEnabled, videoClass }) 
     const videoRef = useRef();
 
     useEffect(() => {
-        const video = videoRef.current;
-        if (video && peer.stream) {
-            video.srcObject = peer.stream;
-        }
-    }, [peer.stream, videoRef]);
+        let rafId;
+
+        const attachStream = () => {
+            const video = videoRef.current;
+            if (video && peer.stream) {
+                // faqat stream o'zgargan va DOM tayyor bo‘lsa
+                video.srcObject = peer.stream;
+            } else {
+                // DOM hali render bo‘lmagan bo‘lishi mumkin, keyingi siklga o'tkazamiz
+                rafId = requestAnimationFrame(attachStream);
+            }
+        };
+
+        attachStream();
+
+        return () => {
+            if (rafId) cancelAnimationFrame(rafId);
+        };
+    }, [peer.stream]);
 
     return (
         <div className="relative flex flex-col items-center bg-black rounded-2xl shadow-xl overflow-hidden border-2 border-cyan-200 transition-all duration-300 w-full h-full">
-            {isVideoEnabled ? (
+            {isVideoEnabled && peer.stream ? (
                 <video
                     ref={videoRef}
                     autoPlay
