@@ -1,16 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
-
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-
 import NameModal from "../components/NameModal";
 import VideoGrid from "../components/VideoGrid";
 import Toolbar from "../components/Toolbar";
 
 const SOCKET_URL = "http://localhost:5000";
-const socket = io(SOCKET_URL, { autoConnect: false });
+
+const socket = io(window.location.origin, {
+    path: "/socket.io",
+    transports: ["websocket"]
+});
 
 const iceConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]

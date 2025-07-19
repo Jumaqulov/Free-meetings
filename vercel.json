@@ -1,8 +1,12 @@
 {
     "rewrites": [
         {
+            "source": "/socket.io/:path*",
+            "destination": "https://my-socket-server.onrender.com/socket.io/:path*"
+        },
+        {
             "source": "/(.*)",
-            "destination": "/"
+            "destination": "/index.html"
         }
     ]
 }
